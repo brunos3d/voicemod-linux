@@ -1,0 +1,28 @@
+{
+  "name": "voicemod-linux",
+  "version": "1.0.0",
+  "description": "Run the official Windows build of Voicemod on Linux through Proton. Unofficial compatibility tool; requires your own Voicemod account.",
+  "bin": {
+    "voicemod-linux-install": "install.sh"
+  },
+  "scripts": {
+    "preinstall": "exit 0"
+  },
+  "os": [
+    "linux"
+  ],
+  "keywords": [
+    "voicemod",
+    "linux",
+    "proton",
+    "wine",
+    "pipewire",
+    "compatibility"
+  ],
+  "homepage": "https://github.com/BrunoS3D/voicemod-linux",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/BrunoS3D/voicemod-linux.git"
+  },
+  "license": "MIT"
+}
