@@ -86,18 +86,22 @@ bootstrap() {
     step "Downloading the voicemod-linux bundle"
     local url="https://github.com/$REPO/releases/latest/download/$RELEASE_ASSET"
     local tmp; tmp="$(mktemp -d "${TMPDIR:-/tmp}/voicemod-linux.XXXXXX")"
+    # Run the bundled installer as a child (not exec) so this trap always
+    # removes the temporary download, even on failure.
     trap 'rm -rf "$tmp"' EXIT
     fetch "$url" "$tmp/bundle.tar.gz" || die "could not download $url"
     mkdir -p "$tmp/payload"
-    tar -xzf "$tmp/bundle.tar.gz" -C "$tmp/payload" --strip-components=0
+    tar -xzf "$tmp/bundle.tar.gz" -C "$tmp/payload"
     local inner; inner="$(dirname "$(find "$tmp/payload" -name voicemod-linux -path '*/bin/*' | head -n1)")/.."
     [[ -f "$inner/install.sh" ]] || die "release bundle is malformed"
     ok "bundle ready"
-    VML_PREFIX="$PREFIX" exec bash "$inner/install.sh" --local \
-        $([[ "$ASSUME_YES" == 1 ]] && echo --yes) \
-        $([[ "$DO_DEPS"   == 0 ]] && echo --no-deps) \
-        $([[ "$DO_PROTON" == 0 ]] && echo --no-proton) \
-        $([[ "$DO_APP"    == 0 ]] && echo --no-app)
+    local -a args=(--local)
+    [[ "$ASSUME_YES" == 1 ]] && args+=(--yes)
+    [[ "$DO_DEPS"   == 0 ]] && args+=(--no-deps)
+    [[ "$DO_PROTON" == 0 ]] && args+=(--no-proton)
+    [[ "$DO_APP"    == 0 ]] && args+=(--no-app)
+    VML_PREFIX="$PREFIX" bash "$inner/install.sh" "${args[@]}"
+    exit $?
 }
 
 # -------------------------------------------------------------- banner --
