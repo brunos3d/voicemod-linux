@@ -1,0 +1,61 @@
+voicemod-linux
+===============
+
+This project is an unofficial compatibility tool. It is not affiliated with,
+endorsed by, or sponsored by Voicemod S.L.
+
+What this repository contains
+-----------------------------
+Only original code written for this project, licensed under the MIT License
+(see LICENSE):
+
+  - bin/voicemod-linux        launcher script
+  - bin/voicemod-open-url     browser opener for login links
+  - bridge/vadshim/           C source for a user-mode shim (avrt.dll)
+  - bridge/registry/          Windows registry fragment
+  - install.sh, uninstall.sh  one-command setup scripts
+  - scripts/, share/, docs/   release packaging, desktop template, docs
+
+The repository contains no compiled binaries. Release bundles additionally
+contain the shim (avrt.dll) compiled from bridge/vadshim/vadshim.c; that binary
+is also our own work under the MIT License, and the build is reproducible.
+
+What this repository does NOT contain
+-------------------------------------
+No Voicemod code, binaries, assets, trademarks, or logos are distributed here.
+The Voicemod application is downloaded at install time from Voicemod's own
+servers (api.voicemod.net and its CDN) into the user's home directory. You
+must have your own Voicemod account to use it. This tool does not bypass
+payment, licensing, authentication, or any copy-protection measure.
+
+Purpose and legal basis
+------------------------
+The shim and registry fragment exist only to achieve interoperability between
+the unmodified Voicemod application and a Linux audio stack (PipeWire) and
+graphics stack, replacing the Windows-only kernel driver and system calls that
+Wine does not provide. The application binary on disk is never modified.
+
+In the European Union, Directive 2009/24/EC permits the acts needed to achieve
+interoperability of an independently created program (Article 6), and declares
+contractual terms that forbid them null and void (Article 8). Users in other
+jurisdictions should review their local law and Voicemod's Terms of Use before
+using this tool. Running it may still conflict with Voicemod's Terms of Use and
+could put an account at risk; that decision rests with the user.
+
+Third-party software obtained at install time (not redistributed here)
+----------------------------------------------------------------------
+  - Voicemod            proprietary, (c) Voicemod S.L.
+                        https://www.voicemod.net/terms-of-use/
+                        downloaded from Voicemod's servers.
+
+  - GE-Proton           by GloriousEggroll. Proton's top-level code is under
+                        the BSD 3-Clause License (Valve Corporation); it bundles
+                        Wine (LGPL-2.1-or-later), DXVK (zlib), vkd3d-proton
+                        (LGPL/zlib) and other components under their own
+                        licenses. Downloaded from:
+                        https://github.com/GloriousEggroll/proton-ge-custom
+
+Build tools (used only to compile the shim, not bundled)
+--------------------------------------------------------
+  - clang / lld (Apache-2.0 with LLVM exceptions)
+  - Wine development headers and winedump (LGPL-2.1-or-later)

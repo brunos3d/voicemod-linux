@@ -1,0 +1,28 @@
+# This repository is source only. No compiled binaries, no third-party
+# payloads (Voicemod, Proton), no downloaded artifacts.
+
+# Shim build output (the shim is built for releases, never committed)
+/bridge/vadshim/build/
+/bridge/vadshim/avrt.dll
+/bridge/vadshim/avrt.lib
+/bridge/vadshim/avrt.exp
+
+# Release packaging output
+/dist/
+
+# Local dev install / runtime state, if someone points VML_PREFIX here
+/prefix/
+/proton/
+/app/
+/downloads/
+/logs/
+/steam-stub/
+/share/voicemod-linux.png
+
+# Node (only package.json is tracked, for the npx entry)
+/node_modules/
+package-lock.json
+
+# Editor / OS noise
+*.swp
+.DS_Store
