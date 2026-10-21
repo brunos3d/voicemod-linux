@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Voicemod
+GenericName=Voice Changer
+Comment=Real-time voice changer and soundboard (Windows build via Proton)
+Exec=@EXEC@ open %u
+Icon=@ICON@
+Terminal=false
+Categories=AudioVideo;Audio;
+Keywords=voice;changer;soundboard;microphone;
+MimeType=x-scheme-handler/voicemod;
+StartupWMClass=voicemod.exe

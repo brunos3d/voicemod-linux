@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Called by Wine's winebrowser when Voicemod opens a link (login, checkout,
+# help pages). A browser started as a child of Wine inherits a partial
+# environment, Wine's blocked signal mask and its file descriptors, and
+# Chrome crashes right after start. The URL is therefore opened by the
+# systemd user manager, outside Wine's process tree. If that is not
+# available, xdg-open runs with the session variables rebuilt by hand.
+uid="$(/usr/bin/id -u)"
+runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$uid}"
+[[ -d "$runtime_dir" ]] || runtime_dir="/run/user/$uid"
+
+wayland="${WAYLAND_DISPLAY:-}"
+if [[ -z "$wayland" ]]; then
+    for sock in "$runtime_dir"/wayland-[0-9]; do
+        [[ -S "$sock" ]] && wayland="$(basename "$sock")" && break
+    done
+fi
+
+dbus="${DBUS_SESSION_BUS_ADDRESS:-}"
+[[ -z "$dbus" && -S "$runtime_dir/bus" ]] && dbus="unix:path=$runtime_dir/bus"
+
+log="$runtime_dir/voicemod-open-url.log"
+printf '%s %s\n' "$(/usr/bin/date '+%F %T')" "$*" >> "$log"
+
+# Resolve the default browser's command line from its .desktop file. xdg-open
+# and gio route through the OpenURI portal inside a systemd unit, which drops
+# the request silently, so the browser binary is started directly.
+browser_cmd() {
+    local id file dir exec_line
+    id="$(XDG_DATA_DIRS="${XDG_DATA_DIRS:-/usr/local/share:/usr/share}" xdg-settings get default-web-browser 2>/dev/null)"
+    [[ -n "$id" ]] || return 1
+    for dir in "$HOME/.local/share" ${XDG_DATA_DIRS//:/ } /usr/local/share /usr/share; do
+        [[ -f "$dir/applications/$id" ]] && file="$dir/applications/$id" && break
+    done
+    [[ -n "${file:-}" ]] || return 1
+    exec_line="$(awk -F= '/^\[Desktop Entry\]/{d=1;next} /^\[/{d=0} d&&$1=="Exec"{sub(/^Exec=/,"");print;exit}' "$file")"
+    exec_line="$(sed -E 's/ ?%[fFuUdDnNickvm]//g' <<<"$exec_line")"
+    [[ -n "$exec_line" ]] && printf '%s' "$exec_line"
+}
+
+if command -v systemd-run >/dev/null && [[ -n "$dbus" ]] && cmd="$(browser_cmd)"; then
+    # shellcheck disable=SC2086 # the Exec line is split into words on purpose
+    DBUS_SESSION_BUS_ADDRESS="$dbus" XDG_RUNTIME_DIR="$runtime_dir" \
+        systemd-run --user --quiet --collect --unit="voicemod-open-url-$$" \
+        $cmd "$@" >> "$log" 2>&1 && exit 0
+fi
+
+exec /usr/bin/env -i \
+    HOME="$HOME" USER="${USER:-$(/usr/bin/id -un)}" LANG="${LANG:-C.UTF-8}" \
+    PATH="/usr/local/bin:/usr/bin:/bin" \
+    DISPLAY="${DISPLAY:-:0}" WAYLAND_DISPLAY="$wayland" \
+    XDG_RUNTIME_DIR="$runtime_dir" \
+    XDG_SESSION_TYPE="${XDG_SESSION_TYPE:-${wayland:+wayland}}" \
+    XDG_CURRENT_DESKTOP="${XDG_CURRENT_DESKTOP:-}" \
+    XDG_DATA_DIRS="${XDG_DATA_DIRS:-/usr/local/share:/usr/share}" \
+    DBUS_SESSION_BUS_ADDRESS="$dbus" \
+    /usr/bin/xdg-open "$@" >> "$log" 2>&1

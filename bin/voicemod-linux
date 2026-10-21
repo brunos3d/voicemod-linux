@@ -1,0 +1,267 @@
+#!/usr/bin/env bash
+# voicemod-linux: runs the official Windows build of Voicemod through Proton
+# (Wine + DXVK) and replaces its Windows-only audio driver with PipeWire
+# virtual devices and a small user-mode shim.
+#
+# Usage: voicemod-linux [command]
+#   run (default)    start Voicemod, or focus the running instance
+#   open URL         handle a voicemod: link (login callback, voice imports)
+#   update           download the current Voicemod release from voicemod.net
+#   kill             stop Voicemod and its wineserver
+#   setup-audio      create the PipeWire virtual devices
+#   teardown-audio   remove them
+#   logs             follow the Voicemod log
+#   winecfg          open winecfg for the Voicemod prefix
+#   doctor           print the detected configuration
+set -euo pipefail
+
+# Layout (VML_HOME defaults to the directory that contains bin/):
+#   bin/              this script and the URL opener
+#   bridge/           vadshim (avrt.dll) and registry entries
+#   app/core/         %LOCALAPPDATA%\VoicemodV3\app\last
+#   prefix/pfx/       Proton prefix
+#   proton/           GE-Proton downloaded by install.sh, if any
+#   logs/
+VML_HOME="${VML_HOME:-$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)}"
+CORE_DIR="$VML_HOME/app/core"
+COMPAT="$VML_HOME/prefix"
+PFX="$COMPAT/pfx"
+LOG_DIR="$VML_HOME/logs"
+WIN_USER="steamuser"
+LOCAL_APPDATA="$PFX/drive_c/users/$WIN_USER/AppData/Local/VoicemodV3"
+CORE_WIN_PATH='C:\users\steamuser\AppData\Local\VoicemodV3\app\last\Voicemod.exe'
+UPDATE_API="https://api.voicemod.net/v1/nextgen/update/latest"
+
+# The Windows driver exposes endpoints named "... (Voicemod Virtual Audio
+# Device (WDM))" and the app looks the driver up by that name, so the
+# PipeWire nodes carry the same description.
+VAD_DESC="Voicemod Virtual Audio Device (WDM)"
+VAD_SINK="voicemod_vad"
+VAD_SOURCE="voicemod_mic"
+
+log() {
+    printf '[voicemod-linux] %s\n' "$*" >&2
+    mkdir -p "$LOG_DIR"
+    printf '%s %s\n' "$(date '+%F %T')" "$*" >> "$LOG_DIR/voicemod-linux.log"
+}
+die() { log "error: $*"; exit 1; }
+
+is_running() { pgrep -f 'VoicemodV3\\app\\last\\Voicemod.exe' >/dev/null; }
+
+# ---------------------------------------------------------------- Proton --
+
+PROTON_SEARCH_DIRS=(
+    "$VML_HOME/proton"
+    "$HOME/.steam/steam/compatibilitytools.d"
+    "$HOME/.local/share/Steam/compatibilitytools.d"
+    "$HOME/.var/app/com.valvesoftware.Steam/data/Steam/compatibilitytools.d"
+)
+
+find_proton() {
+    if [[ -n "${VOICEMOD_PROTON:-}" ]]; then
+        [[ -x "$VOICEMOD_PROTON/proton" ]] || die "VOICEMOD_PROTON=$VOICEMOD_PROTON has no proton script"
+        echo "$VOICEMOD_PROTON"
+        return
+    fi
+    # Prefer the newest GE-Proton: its Wine implements the shared D3D11
+    # textures QtWebEngine uses; the stock Wine 10/11 shows a black window.
+    local dir name best=""
+    for dir in "${PROTON_SEARCH_DIRS[@]}"; do
+        for name in "$dir"/GE-Proton*; do
+            [[ -x "$name/proton" ]] && best+="$(basename "$name") $name"$'\n'
+        done
+    done
+    best="$(printf '%s' "$best" | sort -V -k1,1 | tail -n1 | cut -d' ' -f2-)"
+    [[ -n "$best" ]] || die "GE-Proton not found. Run install.sh again or set VOICEMOD_PROTON."
+    echo "$best"
+}
+
+steam_client_path() {
+    local d
+    for d in "$HOME/.steam/steam" "$HOME/.local/share/Steam"; do
+        [[ -d "$d" ]] && { echo "$d"; return; }
+    done
+    # Proton only needs the variable to point at a directory.
+    mkdir -p "$VML_HOME/steam-stub"
+    echo "$VML_HOME/steam-stub"
+}
+
+proton() {
+    local p
+    p="$(find_proton)"
+    STEAM_COMPAT_DATA_PATH="$COMPAT" \
+    STEAM_COMPAT_CLIENT_INSTALL_PATH="${STEAM_COMPAT_CLIENT_INSTALL_PATH:-$(steam_client_path)}" \
+    WINEDEBUG="${WINEDEBUG:--all}" \
+    LC_NUMERIC="${VOICEMOD_LC_NUMERIC:-C.UTF-8}" \
+    WINEDLLOVERRIDES="avrt=n,b${WINEDLLOVERRIDES:+;$WINEDLLOVERRIDES}" \
+    PROTON_LOG="${PROTON_LOG:-0}" \
+        python3 "$p/proton" "$@"
+}
+
+winepath_of() { printf 'Z:%s' "${1//\//\\}"; }
+
+# ---------------------------------------------------------------- prefix --
+
+ensure_prefix() {
+    [[ -f "$CORE_DIR/Voicemod.exe" ]] || die "Voicemod is not downloaded yet; run 'voicemod-linux update'"
+    if [[ ! -f "$PFX/system.reg" ]]; then
+        log "Creating the Proton prefix (the first start takes a minute)"
+        mkdir -p "$COMPAT"
+        proton run wineboot -u >/dev/null 2>&1
+    fi
+
+    # Same location the official launcher installs the app to.
+    mkdir -p "$LOCAL_APPDATA/app"
+    ln -sfn "$CORE_DIR" "$LOCAL_APPDATA/app/last"
+
+    install_shim
+
+    # Links opened by the app go through a wrapper that starts the native
+    # browser outside Wine's process tree.
+    local marker="$COMPAT/.browser-$(printf '%s' "$VML_HOME" | sha1sum | cut -c1-12)"
+    if [[ ! -f "$marker" ]]; then
+        proton run reg add 'HKCU\Software\Wine\WineBrowser' /v Browsers \
+            /d "$VML_HOME/bin/voicemod-open-url" /f >/dev/null 2>&1
+        rm -f "$COMPAT"/.browser-*
+        touch "$marker"
+    fi
+
+    # Device entry for the kSysVad driver, so the post-login driver check
+    # finds a device and a DriverVersion it accepts.
+    local reg="$VML_HOME/bridge/registry/voicemodvad.reg"
+    local regmark="$COMPAT/.registry-$(sha1sum "$reg" | cut -c1-12)"
+    if [[ ! -f "$regmark" ]]; then
+        proton run regedit /S "$(winepath_of "$reg")" >/dev/null 2>&1
+        rm -f "$COMPAT"/.registry-*
+        touch "$regmark"
+        log "Imported driver registry entries"
+    fi
+}
+
+# vadshim answers the \\.\voicemodvad control channel of the Windows driver.
+# Wine loads it from the application folder because of avrt=n,b.
+install_shim() {
+    local src="$VML_HOME/bridge/vadshim/avrt.dll"
+    [[ -f "$src" ]] || die "missing $src"
+    cmp -s "$src" "$CORE_DIR/avrt.dll" || cp "$src" "$CORE_DIR/avrt.dll"
+}
+
+# ----------------------------------------------------------------- audio --
+
+has_node() { pactl list short "$1" | awk '{print $2}' | grep -qx "$2"; }
+
+setup_audio() {
+    command -v pactl >/dev/null || die "pactl not found (install pipewire-pulse or pulseaudio-utils)"
+    if ! has_node sinks "$VAD_SINK"; then
+        pactl load-module module-null-sink \
+            sink_name="$VAD_SINK" rate=48000 channels=2 \
+            sink_properties="device.description=\"$VAD_DESC\" device.icon_name=audio-card" >/dev/null
+        log "Created sink $VAD_SINK (Voicemod writes the processed voice here)"
+    fi
+    if ! has_node sources "$VAD_SOURCE"; then
+        pactl load-module module-remap-source \
+            source_name="$VAD_SOURCE" master="$VAD_SINK.monitor" \
+            source_properties="device.description=\"$VAD_DESC\" device.icon_name=audio-input-microphone" >/dev/null
+        log "Created source $VAD_SOURCE (pick it as the microphone in other apps)"
+    fi
+}
+
+teardown_audio() {
+    local id
+    for id in $(pactl list short modules | awk -v s="$VAD_SINK" -v m="$VAD_SOURCE" \
+            '$0 ~ "sink_name="s || $0 ~ "source_name="m {print $1}'); do
+        pactl unload-module "$id"
+    done
+    log "Removed PipeWire virtual devices"
+}
+
+# ---------------------------------------------------------------- update --
+
+update() {
+    command -v curl >/dev/null || die "curl not found"
+    command -v unzip >/dev/null || die "unzip not found"
+    is_running && die "close Voicemod first ('voicemod-linux kill')"
+
+    local version url
+    read -r version url < <(curl -fsSL "$UPDATE_API" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+print(d["appVersion"], d["version"]["update"]["windows"]["file"])') \
+        || die "could not query $UPDATE_API"
+
+    if [[ "$(cat "$CORE_DIR/.version" 2>/dev/null)" == "$version" ]]; then
+        log "Voicemod $version is already installed"
+        return
+    fi
+
+    local tmp
+    tmp="$(mktemp -d "${TMPDIR:-/tmp}/voicemod-linux.XXXXXX")"
+    trap 'rm -rf "$tmp"' RETURN
+    log "Downloading Voicemod $version from voicemod.net"
+    curl -fL --progress-bar -o "$tmp/voicemod.zip" "$url" || die "download failed"
+    unzip -q "$tmp/voicemod.zip" -d "$tmp/core"
+    # ARM64EC and Legacy (no AVX) builds are not needed on x86-64 with AVX.
+    rm -rf "$tmp/core/ARM64EC" "$tmp/core/Legacy"
+    echo "$version" > "$tmp/core/.version"
+
+    mkdir -p "$VML_HOME/app"
+    rm -rf "$CORE_DIR"
+    mv "$tmp/core" "$CORE_DIR"
+    install_shim
+    log "Voicemod $version installed in $CORE_DIR"
+}
+
+# ------------------------------------------------------------------- run --
+
+run() {
+    if is_running; then
+        # A second --launcher start creates another instance and tray icon.
+        # Starting the exe without it makes the running app show its window.
+        log "Voicemod is already running, bringing it to front"
+        proton run "$CORE_WIN_PATH"
+        return
+    fi
+    ensure_prefix
+    setup_audio
+    log "Starting Voicemod $(cat "$CORE_DIR/.version" 2>/dev/null) with $(basename "$(find_proton)")"
+    proton run "$CORE_WIN_PATH" --launcher "$@"
+}
+
+# Entry point of the .desktop file. Voicemod links look like
+# "voicemod:login_token&code=..." (no "//").
+open_entry() {
+    log "open requested with '${1:-}'"
+    if [[ "${1:-}" == voicemod:* ]]; then
+        if is_running; then
+            proton run "$CORE_WIN_PATH" "$1"
+        else
+            run "$1"
+        fi
+    else
+        run
+    fi
+}
+
+doctor() {
+    echo "VML_HOME     $VML_HOME"
+    echo "Voicemod     $(cat "$CORE_DIR/.version" 2>/dev/null || echo 'not installed')"
+    echo "Proton       $( (find_proton) 2>/dev/null || echo 'not found')"
+    echo "Prefix       $([[ -f "$PFX/system.reg" ]] && echo "$PFX" || echo 'not created yet')"
+    echo "Audio server $(pactl info 2>/dev/null | sed -n 's/^Server Name: //p')"
+    echo "Running      $(is_running && echo yes || echo no)"
+    echo "URL handler  $(xdg-mime query default x-scheme-handler/voicemod 2>/dev/null)"
+}
+
+case "${1:-run}" in
+    run)            shift || true; run "$@" ;;
+    open)           shift || true; open_entry "${1:-}" ;;
+    update)         update ;;
+    kill)           proton run wineserver -k 2>/dev/null || pkill -f 'VoicemodV3\\app\\last' || true ;;
+    setup-audio)    setup_audio ;;
+    teardown-audio) teardown_audio ;;
+    logs)           tail -f "$LOCAL_APPDATA/logs/voicemod-desktop.log" ;;
+    winecfg)        ensure_prefix; proton run winecfg ;;
+    doctor)         doctor ;;
+    -h|--help|help) sed -n '6,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' ;;
+    *)              die "unknown command '$1' (see 'voicemod-linux help')" ;;
+esac
