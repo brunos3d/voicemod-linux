@@ -1,0 +1,36 @@
+Windows Registry Editor Version 5.00
+
+; Mirrors what voicemodvad.inf (kSysVad) leaves in the registry on Windows.
+; Voicemod enumerates MEDIA class devices through SetupAPI, matches the
+; device description and reads DriverVersion from the driver key.
+
+[HKEY_LOCAL_MACHINE\System\CurrentControlSet\Enum\ROOT\MEDIA\0000]
+"ClassGUID"="{4d36e96c-e325-11ce-bfc1-08002be10318}"
+"Class"="MEDIA"
+"DeviceDesc"="Voicemod"
+"Mfg"="Voicemod S.L."
+"HardwareID"=hex(7):52,00,4f,00,4f,00,54,00,5c,00,76,00,6f,00,69,00,63,00,65,00,6d,00,6f,00,64,00,76,00,61,00,64,00,00,00,00,00
+"Driver"="{4d36e96c-e325-11ce-bfc1-08002be10318}\\0000"
+"Service"="voicemodvad"
+"ConfigFlags"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Class\{4d36e96c-e325-11ce-bfc1-08002be10318}\0000]
+"DriverDesc"="Voicemod"
+"DriverVersion"="2025.10.8.0"
+"DriverDate"="10-8-2025"
+"ProviderName"="Voicemod S.L."
+"MatchingDeviceId"="ROOT\\voicemodvad"
+"InfPath"="oem42.inf"
+"InfSection"="VOICEMODVAD_DRIVER"
+
+; Wine's SetupAPI reports a device as present (DIGCF_PRESENT) only when it
+; exposes at least one device interface. A private interface class is used
+; so audio enumerators (KSCATEGORY_AUDIO, WDM-KS) do not try to open it.
+[HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\DeviceClasses\{8a3c6d1e-5b7f-4c2a-9e41-6d0f2b9a7c15}\##?#ROOT#MEDIA#0000#{8a3c6d1e-5b7f-4c2a-9e41-6d0f2b9a7c15}]
+"DeviceInstance"="ROOT\\MEDIA\\0000"
+
+[HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\DeviceClasses\{8a3c6d1e-5b7f-4c2a-9e41-6d0f2b9a7c15}\##?#ROOT#MEDIA#0000#{8a3c6d1e-5b7f-4c2a-9e41-6d0f2b9a7c15}\#]
+"SymbolicLink"="\\\\?\\ROOT#MEDIA#0000#{8a3c6d1e-5b7f-4c2a-9e41-6d0f2b9a7c15}"
+
+[HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\DeviceClasses\{8a3c6d1e-5b7f-4c2a-9e41-6d0f2b9a7c15}\##?#ROOT#MEDIA#0000#{8a3c6d1e-5b7f-4c2a-9e41-6d0f2b9a7c15}\#\Control]
+"Linked"=dword:00000001

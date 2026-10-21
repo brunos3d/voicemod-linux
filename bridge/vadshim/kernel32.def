@@ -1,0 +1,24 @@
+; Minimal import definition for the kernel32 functions vadshim uses.
+; Hand-maintained so the shim builds with only clang, lld and the Wine
+; headers, without winedump or a kernel32.dll present at build time.
+LIBRARY kernel32.dll
+EXPORTS
+  CreateEventW
+  CreateFileA
+  CreateFileW
+  DeviceIoControl
+  DisableThreadLibraryCalls
+  EnterCriticalSection
+  GetCurrentThread
+  GetModuleHandleA
+  GetProcAddress
+  GetTempPathA
+  InitializeCriticalSection
+  LeaveCriticalSection
+  SetEvent
+  SetLastError
+  SetThreadPriority
+  VirtualProtect
+  WaitForSingleObject
+  WriteFile
+  lstrcmpA
