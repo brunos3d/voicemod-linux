@@ -2,8 +2,8 @@
 # voicemod-linux installer.
 #
 # One-line install (nothing to clone):
-#   curl -fsSL https://raw.githubusercontent.com/BrunoS3D/voicemod-linux/main/install.sh | bash
-#   wget -qO-  https://raw.githubusercontent.com/BrunoS3D/voicemod-linux/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/brunos3d/voicemod-linux/main/install.sh | bash
+#   wget -qO-  https://raw.githubusercontent.com/brunos3d/voicemod-linux/main/install.sh | bash
 #
 # This script sets up a tool that runs the official Windows build of Voicemod
 # on Linux through Proton. It does NOT contain or distribute any Voicemod or
@@ -16,7 +16,7 @@
 # temporary directory, installs from there, and deletes the temporary copy.
 set -euo pipefail
 
-REPO="BrunoS3D/voicemod-linux"
+REPO="brunos3d/voicemod-linux"
 RELEASE_ASSET="voicemod-linux.tar.gz"
 PREFIX="${VML_PREFIX:-${XDG_DATA_HOME:-$HOME/.local/share}/voicemod-linux}"
 BIN_LINK="$HOME/.local/bin/voicemod-linux"

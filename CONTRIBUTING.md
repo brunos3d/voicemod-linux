@@ -27,7 +27,7 @@ reports and fixes for environments it has not been tried on.
 ## Development setup
 
 ```sh
-git clone https://github.com/BrunoS3D/voicemod-linux
+git clone https://github.com/brunos3d/voicemod-linux
 cd voicemod-linux
 # build the shim (needs clang, lld, and the Wine headers in /usr/include/wine)
 make -C bridge/vadshim

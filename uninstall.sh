@@ -2,8 +2,8 @@
 # voicemod-linux uninstaller.
 #
 # One-line uninstall:
-#   curl -fsSL https://raw.githubusercontent.com/BrunoS3D/voicemod-linux/main/uninstall.sh | bash
-#   wget -qO-  https://raw.githubusercontent.com/BrunoS3D/voicemod-linux/main/uninstall.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/brunos3d/voicemod-linux/main/uninstall.sh | bash
+#   wget -qO-  https://raw.githubusercontent.com/brunos3d/voicemod-linux/main/uninstall.sh | bash
 #
 # Removes everything the installer created in your home directory. It does not
 # touch your Voicemod account or a GE-Proton you installed through Steam.

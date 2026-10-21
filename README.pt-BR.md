@@ -31,13 +31,13 @@ Nada para clonar. Rode um destes:
 
 ```sh
 # curl
-curl -fsSL https://raw.githubusercontent.com/BrunoS3D/voicemod-linux/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/brunos3d/voicemod-linux/main/install.sh | bash
 
 # wget
-wget -qO- https://raw.githubusercontent.com/BrunoS3D/voicemod-linux/main/install.sh | bash
+wget -qO- https://raw.githubusercontent.com/brunos3d/voicemod-linux/main/install.sh | bash
 
 # npx (Node)
-npx github:BrunoS3D/voicemod-linux
+npx github:brunos3d/voicemod-linux
 ```
 
 O instalador baixa um pacote pequeno para um diretório temporário, instala o
@@ -84,7 +84,7 @@ voicemod-linux winecfg
 ## Desinstalação
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/BrunoS3D/voicemod-linux/main/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/brunos3d/voicemod-linux/main/uninstall.sh | bash
 ```
 
 Isso remove `~/.local/share/voicemod-linux`, o link do launcher, a entrada do
@@ -133,7 +133,7 @@ O pacote de release já inclui o shim pré-compilado. Para compilar você mesmo,
 precisa de `clang`, `lld` e os headers de desenvolvimento do Wine:
 
 ```sh
-git clone https://github.com/BrunoS3D/voicemod-linux
+git clone https://github.com/brunos3d/voicemod-linux
 cd voicemod-linux
 make -C bridge/vadshim      # produz bridge/vadshim/avrt.dll
 ./install.sh --local        # instala a partir deste checkout
