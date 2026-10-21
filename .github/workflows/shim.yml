@@ -1,0 +1,36 @@
+name: shim
+
+# Builds the vadshim DLL from source and checks the build is reproducible
+# (two builds must be byte-for-byte identical, thanks to lld-link /Brepro).
+# No binary is committed to the repository; the release workflow builds and
+# publishes it.
+
+on:
+  push:
+    paths: ['bridge/vadshim/**', '.github/workflows/shim.yml']
+  pull_request:
+    paths: ['bridge/vadshim/**', '.github/workflows/shim.yml']
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang, lld and Wine headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld wine || sudo apt-get install -y clang lld wine64
+          test -d /usr/include/wine || { echo "Wine headers not found"; exit 1; }
+
+      - name: Build twice and compare
+        run: |
+          make -C bridge/vadshim clean all
+          cp bridge/vadshim/avrt.dll /tmp/a.dll
+          make -C bridge/vadshim clean all
+          cmp bridge/vadshim/avrt.dll /tmp/a.dll
+          echo "reproducible build confirmed"
+          sha256sum bridge/vadshim/avrt.dll
+
+      - name: Report exports
+        run: llvm-readobj --coff-exports bridge/vadshim/avrt.dll | grep -c Name: || true

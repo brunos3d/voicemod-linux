@@ -1,0 +1,47 @@
+name: release
+
+# On a version tag (v*), builds the shim and packages the release bundle that
+# install.sh downloads, then attaches it to a GitHub Release. The bundle
+# contains only this project's own files plus the prebuilt shim; no Voicemod
+# or Proton binaries.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld wine || sudo apt-get install -y clang lld wine64
+          test -d /usr/include/wine || { echo "Wine headers not found"; exit 1; }
+
+      - name: Build the release bundle
+        run: scripts/make-release.sh dist
+
+      - name: Publish the GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/voicemod-linux.tar.gz
+            dist/voicemod-linux.tar.gz.sha256
+            install.sh
+            uninstall.sh
+          body: |
+            Unofficial compatibility tool for running the official Windows build
+            of Voicemod on Linux through Proton. Requires your own Voicemod
+            account. Does not crack, pirate, or bypass payment, login or copy
+            protection.
+
+            Install:
+            ```sh
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | bash
+            ```
